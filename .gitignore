@@ -1,0 +1,4 @@
+*.log
+firmware-*/
+openwrt/
+immortalwrt/

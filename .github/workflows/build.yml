@@ -1,0 +1,149 @@
+name: Build ImmortalWrt Firmware
+
+# 触发方式:
+#   1. 每周一 08:00 (UTC+8) 定时构建
+#   2. 手动触发 (Actions 页面 Run workflow, 可选 target)
+# 注意: 不监听 push, 代码更新不触发构建
+on:
+  schedule:
+    - cron: '0 0 * * 1'   # 每周一 00:00 UTC = 08:00 北京时间
+  workflow_dispatch:
+    inputs:
+      target:
+        description: '构建目标'
+        required: true
+        default: 'x86_64'
+        type: choice
+        options:
+          - x86_64
+
+permissions:
+  contents: write   # 创建 Release 需要
+
+concurrency:
+  group: build-${{ github.event.inputs.target || 'x86_64' }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350   # GitHub 上限 360, 留 10 分钟上传
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                        /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          sudo docker image prune -a -f
+          df -h /
+
+      - name: Maximize build space (LVM)
+        uses: easyinteractive/maximize-build-space@master
+        with:
+          root-reserve-mb: 4096
+          swap-size-mb: 512
+          purge: false
+        continue-on-error: true
+
+      - name: Set up cache (ccache + toolchain)
+        uses: actions/cache@v4
+        with:
+          path: |
+            immortalwrt/.ccache
+            immortalwrt/staging_dir/toolchain-*
+            immortalwrt/staging_dir/host*
+            immortalwrt/build_dir/toolchain-*
+            immortalwrt/build_dir/host*
+          key: iwrt-${{ github.event.inputs.target || 'x86_64' }}-${{ github.sha }}
+          restore-keys: |
+            iwrt-${{ github.event.inputs.target || 'x86_64' }}-
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang flex bison g++ gawk gettext git libncurses-dev \
+            libssl-dev zlib1g-dev libelf-dev unzip rsync wget subversion \
+            device-tree-compiler dwarves cpio bc python3 python3-setuptools
+          # root 下编译 GNU 软件包必须
+          echo "FORCE_UNSAFE_CONFIGURE=1" >> "$GITHUB_ENV"
+
+      - name: Clone ImmortalWrt (master)
+        run: |
+          git clone --depth=1 https://github.com/immortalwrt/immortalwrt.git
+
+      - name: Prepare (feeds / turboacc / config)
+        run: |
+          chmod +x scripts/prepare.sh
+          TARGET="${{ github.event.inputs.target || 'x86_64' }}"
+          ./scripts/prepare.sh "$TARGET"
+        working-directory: ${{ github.workspace }}
+
+      - name: Download sources
+        run: |
+          cd immortalwrt
+          make -j$(nproc) download
+
+      - name: Build
+        id: build
+        run: |
+          cd immortalwrt
+          echo "BUILD_START=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+          make -j$(nproc) || make -j1 V=s
+          echo "BUILD_END=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
+      - name: Collect artifacts
+        id: collect
+        run: |
+          TARGET="${{ github.event.inputs.target || 'x86_64' }}"
+          OUT="firmware-$TARGET"
+          mkdir -p "$OUT"
+          cd immortalwrt/bin/targets/*/*
+          ls -lh
+          cp *.img.gz *.manifest "$GITHUB_WORKSPACE/$OUT/" 2>/dev/null || true
+          # 生成 sha256
+          cd "$GITHUB_WORKSPACE/$OUT"
+          sha256sum * > sha256sums
+          cat sha256sums
+          KERNEL=$(ls immortalwrt/.config 2>/dev/null >/dev/null && grep -m1 'CONFIG_LINUX=.*' immortalwrt/.config || true)
+          echo "files<<EOF" >> "$GITHUB_OUTPUT"
+          for f in *; do echo "$f"; done >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+        working-directory: ${{ github.workspace }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ github.event.inputs.target || 'x86_64' }}
+          path: firmware-*/
+          retention-days: 14
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: auto-${{ github.event.inputs.target || 'x86_64' }}-${{ github.run_number }}
+          name: ImmortalWrt ${{ github.event.inputs.target || 'x86_64' }} #${{ github.run_number }}
+          body: |
+            自动构建于 ${{ env.BUILD_START }} ~ ${{ env.BUILD_END }}
+
+            - 目标: ${{ github.event.inputs.target || 'x86_64' }}
+            - 上游: immortalwrt/immortalwrt master (${{ github.event.schedule && '定时' || '手动' }}触发)
+
+            **包含**: daed (dae Web UI), luci-app-daed, AdGuardHome, easytier (官方 LuCI),
+            turboacc (mufeng05), SQM, WoL, Arwi 主题, BTF 内核 (daed 依赖), 中文语言包
+
+            **默认**: root 无密码, LAN 192.168.1.1, 首启 LAN 仅 eth0 / WAN eth1 (DHCP)
+            **注意**: 内核带 BTF; 刷机请用 squashfs-combined-efi.img.gz, 校验见 sha256sums
+          files: firmware-*/
+          make_latest: true
+        if: success()
+
+      - name: Failure log
+        if: failure()
+        run: |
+          cd immortalwrt
+          find logs -type f -name '*.txt' | tail -5 | xargs -r tail -50 || true
+          tail -80 build.log 2>/dev/null || true
