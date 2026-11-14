@@ -22,16 +22,27 @@ grep -q 'EasyTier/luci-app-easytier' feeds.conf.default || \
 echo "=== [2/5] turboacc (官方 add_turboacc.sh, 自动按内核版本匹配补丁 + luci UI) ==="
 curl -sSL https://raw.githubusercontent.com/mufeng05/turboacc/main/add_turboacc.sh -o add_turboacc.sh
 bash add_turboacc.sh
-# fw4 + flow-offloading 方案不需要 SFE/Broadcom fullcone 的内核补丁;
-# 上游内核小版本更新后这些补丁常打不上(行号漂移), 与编译失败相比,
-# 去掉它们只损失 SFE/BCM-fullcone 两个不用的特性, 保留 luci UI 与 flow offload
-for p in 952-net-conntrack-events-support-multiple-registrant.patch \
-         982-add-bcm-fullconenat-support.patch \
-         983-add-bcm-fullconenat-to-nft.patch \
-         984-netfilter-reserve-unconfirmed-nat-tuples.patch \
-         985-netfilter-bcm-fullcone-reserve-expectation-early.patch; do
-    rm -f target/linux/generic/hack-*/$p
-done
+# fw4 + flow-offloading 方案不使用 SFE / Broadcom fullcone / fullcone 表达式,
+# 这些补丁跟上游内核/nftables 的每次小版本更新都容易冲突(行号漂移).
+# 删掉后保留: turboacc LuCI UI、flow offloading、TCP 拥塞控制、(可选) nft_fullcone 模块
+# 1) 内核 hack 补丁 (SFE + BCM fullcone)
+rm -f target/linux/generic/hack-*/952-net-conntrack-events-support-multiple-registrant.patch
+rm -f target/linux/generic/hack-*/982-add-bcm-fullconenat-support.patch
+rm -f target/linux/generic/hack-*/983-add-bcm-fullconenat-to-nft.patch
+rm -f target/linux/generic/hack-*/984-netfilter-reserve-unconfirmed-nat-tuples.patch
+rm -f target/linux/generic/hack-*/985-netfilter-bcm-fullcone-reserve-expectation-early.patch
+# 2) nftables / iptables / libnftnl 的 fullcone 表达式补丁
+rm -f package/network/utils/nftables/patches/*fullcone*
+rm -f package/network/utils/iptables/patches/*fullcone*
+rm -f package/libs/libnftnl/patches/*fullcone*
+# 3) firewall4: 删 fullcone 相关(001/002/007), 保留 003-tcpcca(BBR 必需) 与 100-hw-offload(无害)
+rm -f package/network/config/firewall4/patches/001-firewall4-add-support-for-fullcone-nat.patch
+rm -f package/network/config/firewall4/patches/002-firewall4-add-brcm-fullcone-mode.patch
+rm -f package/network/config/firewall4/patches/007-fix-ipv6-masquerade-fullcone-argument.patch
+# 4) 保险: 全局再扫一遍任何残留 fullcone 补丁(不含 tcpcca/hw-offload)
+find package/network/config/firewall4/patches package/network/utils/nftables/patches \
+     package/network/utils/iptables/patches package/libs/libnftnl/patches \
+     target/linux/generic -name '*fullcone*' -type f -delete 2>/dev/null || true
 
 echo "=== [3/5] Arwi 主题 (无 feed 索引, 直接放 package/) ==="
 rm -rf package/luci-theme-arwi
