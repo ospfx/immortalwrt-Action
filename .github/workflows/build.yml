@@ -40,13 +40,13 @@ jobs:
           sudo docker image prune -a -f
           df -h /
 
-      - name: Maximize build space (LVM)
-        uses: easyinteractive/maximize-build-space@master
-        with:
-          root-reserve-mb: 4096
-          swap-size-mb: 512
-          purge: false
-        continue-on-error: true
+      - name: Maximize build space
+        run: |
+          # ubuntu-latest 约 20GB 可用, 清掉不需要的预装环境可到 ~40GB
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /usr/lib/llvm* /opt/ghc \
+                        /usr/local/.ghcup /opt/hostedtoolcache 2>/dev/null || true
+          sudo apt-get clean
+          df -h /
 
       - name: Set up cache (ccache + toolchain)
         uses: actions/cache@v4
