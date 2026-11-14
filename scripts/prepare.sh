@@ -35,10 +35,12 @@ rm -f target/linux/generic/hack-*/985-netfilter-bcm-fullcone-reserve-expectation
 rm -f package/network/utils/nftables/patches/*fullcone*
 rm -f package/network/utils/iptables/patches/*fullcone*
 rm -f package/libs/libnftnl/patches/*fullcone*
-# 3) firewall4: 删 fullcone 相关(001/002/007), 保留 003-tcpcca(BBR 必需) 与 100-hw-offload(无害)
+# 3) firewall4: fullcone 系全删; tcpcca(003) 也删 —— fw4 上游改动频繁, BBR 改用
+#    files/etc/sysctl.conf 兜底设置, 不依赖该补丁
 rm -f package/network/config/firewall4/patches/001-firewall4-add-support-for-fullcone-nat.patch
 rm -f package/network/config/firewall4/patches/002-firewall4-add-brcm-fullcone-mode.patch
 rm -f package/network/config/firewall4/patches/007-fix-ipv6-masquerade-fullcone-argument.patch
+rm -f package/network/config/firewall4/patches/003-add-tcpcca-default-and-apply.patch
 # 4) 保险: 全局再扫一遍任何残留 fullcone 补丁(不含 tcpcca/hw-offload)
 find package/network/config/firewall4/patches package/network/utils/nftables/patches \
      package/network/utils/iptables/patches package/libs/libnftnl/patches \
@@ -56,6 +58,14 @@ cp "$REPO_ROOT/configs/$TARGET.config" .config
 mkdir -p files/etc
 echo 'root::0:0:99999:7:::' > files/etc/shadow
 chmod 600 files/etc/shadow
+
+# BBR + fq (不依赖 fw4 tcpcca 补丁, 直接 sysctl)
+cat > files/etc/sysctl.conf <<'SYS'
+net.core.default_qdisc=fq
+net.ipv4.tcp_congestion_control=bbr
+net.ipv4.conf.all.send_redirects=0
+net.ipv4.conf.default.send_redirects=0
+SYS
 
 # Arwi 设为默认主题
 mkdir -p files/etc/uci-defaults
