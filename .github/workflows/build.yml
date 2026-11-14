@@ -64,8 +64,10 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
+          # clang 不装: runner 镜像(ubuntu 26.04)预装 clang, apt 安装会因
+          # /usr/bin/clang++ 已存在而触发 update-alternatives 冲突 (dpkg exit 2)
           sudo apt-get install -y --no-install-recommends \
-            build-essential clang flex bison g++ gawk gettext git libncurses-dev \
+            build-essential flex bison g++ gawk gettext git libncurses-dev \
             libssl-dev zlib1g-dev libelf-dev unzip rsync wget subversion \
             device-tree-compiler dwarves cpio bc python3 python3-setuptools
           # root 下编译 GNU 软件包必须
