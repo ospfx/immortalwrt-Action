@@ -20,6 +20,7 @@ grep -q 'EasyTier/luci-app-easytier' feeds.conf.default || \
 ./scripts/feeds install -a
 
 echo "=== [2/5] turboacc (官方 add_turboacc.sh, 自动按内核版本匹配补丁 + luci UI) ==="
+curl -sSL https://raw.githubusercontent.com/mufeng05/turboacc/main/add_turboacc.sh -o add_turboacc.sh
 bash add_turboacc.sh
 
 echo "=== [3/5] Arwi 主题 (无 feed 索引, 直接放 package/) ==="
