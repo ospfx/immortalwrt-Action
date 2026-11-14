@@ -22,6 +22,16 @@ grep -q 'EasyTier/luci-app-easytier' feeds.conf.default || \
 echo "=== [2/5] turboacc (官方 add_turboacc.sh, 自动按内核版本匹配补丁 + luci UI) ==="
 curl -sSL https://raw.githubusercontent.com/mufeng05/turboacc/main/add_turboacc.sh -o add_turboacc.sh
 bash add_turboacc.sh
+# fw4 + flow-offloading 方案不需要 SFE/Broadcom fullcone 的内核补丁;
+# 上游内核小版本更新后这些补丁常打不上(行号漂移), 与编译失败相比,
+# 去掉它们只损失 SFE/BCM-fullcone 两个不用的特性, 保留 luci UI 与 flow offload
+for p in 952-net-conntrack-events-support-multiple-registrant.patch \
+         982-add-bcm-fullconenat-support.patch \
+         983-add-bcm-fullconenat-to-nft.patch \
+         984-netfilter-reserve-unconfirmed-nat-tuples.patch \
+         985-netfilter-bcm-fullcone-reserve-expectation-early.patch; do
+    rm -f target/linux/generic/hack-*/$p
+done
 
 echo "=== [3/5] Arwi 主题 (无 feed 索引, 直接放 package/) ==="
 rm -rf package/luci-theme-arwi
