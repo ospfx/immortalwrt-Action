@@ -139,7 +139,7 @@ jobs:
 
             **默认**: root 无密码, LAN 192.168.1.1, 首启 LAN 仅 eth0 / WAN eth1 (DHCP)
             **注意**: 内核带 BTF; 刷机请用 squashfs-combined-efi.img.gz, 校验见 sha256sums
-          files: firmware-*/
+          files: firmware-*/*
           make_latest: true
         if: success()
 
