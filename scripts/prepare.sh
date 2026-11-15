@@ -41,10 +41,14 @@ rm -f package/network/config/firewall4/patches/001-firewall4-add-support-for-ful
 rm -f package/network/config/firewall4/patches/002-firewall4-add-brcm-fullcone-mode.patch
 rm -f package/network/config/firewall4/patches/007-fix-ipv6-masquerade-fullcone-argument.patch
 rm -f package/network/config/firewall4/patches/003-add-tcpcca-default-and-apply.patch
-# 4) 保险: 全局再扫一遍任何残留 fullcone 补丁(不含 tcpcca/hw-offload)
+# 4) 100-hw-offload (MediaTek HNAT/Qualcomm NSS 专供) x86 无此硬件, 删
+rm -f package/network/config/firewall4/patches/100-firewall4-hw-offload-ipv4-only-and-vendor-hnat.patch
+# 5) 保险: 全局再扫一遍任何残留 fullcone 补丁
 find package/network/config/firewall4/patches package/network/utils/nftables/patches \
      package/network/utils/iptables/patches package/libs/libnftnl/patches \
      target/linux/generic -name '*fullcone*' -type f -delete 2>/dev/null || true
+# firewall4 的补丁目录若已全清, 顺手确认
+echo "fw4 patches left: $(ls package/network/config/firewall4/patches/ 2>/dev/null | wc -l)"
 
 echo "=== [3/5] Arwi 主题 (无 feed 索引, 直接放 package/) ==="
 rm -rf package/luci-theme-arwi
